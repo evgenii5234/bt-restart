@@ -2,15 +2,35 @@ package com.example.btrestart;
 
 import android.bluetooth.BluetoothAdapter;
 
+import java.util.concurrent.TimeUnit;
+
 public class BtRestarter {
 
+    public interface Log {
+        void line(String s);
+    }
+
+    public static String stateName(int s) {
+        switch (s) {
+            case BluetoothAdapter.STATE_OFF: return "OFF";
+            case BluetoothAdapter.STATE_TURNING_ON: return "TURNING_ON";
+            case BluetoothAdapter.STATE_ON: return "ON";
+            case BluetoothAdapter.STATE_TURNING_OFF: return "TURNING_OFF";
+            default: return "UNKNOWN(" + s + ")";
+        }
+    }
+
     // Fallback for rooted head units
-    private static boolean shell(String cmd) {
+    private static String shell(String cmd) {
         try {
             Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", cmd});
-            return p.waitFor() == 0;
+            if (!p.waitFor(5, TimeUnit.SECONDS)) {
+                p.destroy();
+                return "su -c \"" + cmd + "\" -> timeout";
+            }
+            return "su -c \"" + cmd + "\" -> exit " + p.exitValue();
         } catch (Exception e) {
-            return false;
+            return "su -c \"" + cmd + "\" -> " + e.getClass().getSimpleName() + ": " + e.getMessage();
         }
     }
 
@@ -26,21 +46,46 @@ public class BtRestarter {
 
     /** Blocking. Call from a background thread. */
     @SuppressWarnings("deprecation")
-    public static String restart() {
+    public static void restart(Log log) {
         BluetoothAdapter a = BluetoothAdapter.getDefaultAdapter();
-        if (a == null) return "Bluetooth adapter not found";
+        if (a == null) {
+            log.line("getDefaultAdapter() = null (no Bluetooth adapter)");
+            return;
+        }
         try {
-            if (a.isEnabled()) {
-                if (!a.disable()) shell("svc bluetooth disable");
-                waitForState(a, BluetoothAdapter.STATE_OFF, 8000);
+            log.line("State at start: " + stateName(a.getState()));
+
+            try {
+                log.line("disable() returned " + a.disable());
+            } catch (Exception e) {
+                log.line("disable() threw " + e);
             }
+            boolean off = waitForState(a, BluetoothAdapter.STATE_OFF, 8000);
+            log.line("Reached OFF: " + off + ", state now " + stateName(a.getState()));
+            if (!off) {
+                log.line(shell("svc bluetooth disable"));
+                waitForState(a, BluetoothAdapter.STATE_OFF, 5000);
+                log.line("State now " + stateName(a.getState()));
+            }
+
             Thread.sleep(1500);
-            if (!a.enable()) shell("svc bluetooth enable");
-            boolean on = waitForState(a, BluetoothAdapter.STATE_ON, 10000);
-            return on ? "Bluetooth restarted" : "Bluetooth did not turn on";
+
+            try {
+                log.line("enable() returned " + a.enable());
+            } catch (Exception e) {
+                log.line("enable() threw " + e);
+            }
+            boolean on = waitForState(a, BluetoothAdapter.STATE_ON, 15000);
+            log.line("Reached ON: " + on + ", state now " + stateName(a.getState()));
+            if (!on) {
+                log.line(shell("svc bluetooth enable"));
+                waitForState(a, BluetoothAdapter.STATE_ON, 10000);
+                log.line("State now " + stateName(a.getState()));
+            }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return "Interrupted";
+            log.line("Interrupted");
         }
+        log.line("-- done --");
     }
 }
