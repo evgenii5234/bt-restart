@@ -44,6 +44,8 @@ public class MainActivity extends Activity {
         Button settings = button("Open Bluetooth settings");
         Button request = button("Ask system to turn on Bluetooth");
         Button list = button("List Bluetooth-related apps");
+        Button vendor = button("Open vendor Bluetooth app (com.tw.bt)");
+        Button info = button("App info: vendor Bluetooth (Force stop)");
 
         logView = new TextView(this);
         logView.setTextSize(16);
@@ -65,6 +67,7 @@ public class MainActivity extends Activity {
 
         settings.setOnClickListener(v -> {
             try {
+                log("Opening Bluetooth settings...");
                 startActivity(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS));
             } catch (Exception e) {
                 log("Settings screen failed: " + e);
@@ -73,6 +76,7 @@ public class MainActivity extends Activity {
 
         request.setOnClickListener(v -> {
             try {
+                log("Sending enable request...");
                 startActivity(new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE));
             } catch (Exception e) {
                 log("Enable request failed: " + e);
@@ -92,10 +96,36 @@ public class MainActivity extends Activity {
             log("-- end of list --");
         }).start());
 
+        vendor.setOnClickListener(v -> {
+            Intent i = getPackageManager().getLaunchIntentForPackage("com.tw.bt");
+            if (i == null) {
+                log("No launch intent for com.tw.bt");
+                return;
+            }
+            try {
+                log("Opening com.tw.bt...");
+                startActivity(i);
+            } catch (Exception e) {
+                log("Launch failed: " + e);
+            }
+        });
+
+        info.setOnClickListener(v -> {
+            try {
+                log("Opening app info for com.tw.bt...");
+                startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        android.net.Uri.parse("package:com.tw.bt")));
+            } catch (Exception e) {
+                log("App info failed: " + e);
+            }
+        });
+
         root.addView(restart);
         root.addView(settings);
         root.addView(request);
         root.addView(list);
+        root.addView(vendor);
+        root.addView(info);
         root.addView(logView);
         setContentView(scroll);
     }
